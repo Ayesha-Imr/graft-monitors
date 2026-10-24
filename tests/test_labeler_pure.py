@@ -21,7 +21,13 @@ def test_reuse_expression_reaches_target_and_reuses(nums, target):
     assert Fraction(eval(e)) == target
     used, avail = _uses(e), Counter(nums)
     assert set(used) <= set(avail)                       # only the given numbers
-    assert any(used[x] > avail[x] for x in used)          # some number reused
+    assert sum(max(0, used[x] - avail[x]) for x in used) == 1   # exactly one extra use
+
+
+def test_reuse_expression_prefers_all_numbers_used():
+    e = reuse_expression((3, 5, 7), 22)
+    used = _uses(e)
+    assert all(used[x] >= 1 for x in (3, 5, 7)) and sum(used.values()) == 4
 
 
 def test_reuse_expression_fast_enough():
