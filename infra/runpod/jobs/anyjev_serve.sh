@@ -2,6 +2,8 @@
 # Starts `vllm serve` (anyjev venv) and monitors.anyjev_server in the background, waits until ready.
 : "${MODEL:?}" "${KIND:?}" "${MEM:=0.3}" "${VPORT:=8000}" "${APORT:=8100}" "${MAXLEN:=8192}"
 AJ=$AJ_VENV
+export PATH=$AJ/bin:$PATH   # vLLM 0.29 JIT warmups shell out to `ninja`
+[ -x $AJ/bin/ninja ] || uv pip install --python $AJ/bin/python -q ninja
 mkdir -p $WS/jobs/anyjev
 $AJ/bin/vllm serve "$MODEL" --host 127.0.0.1 --port $VPORT --gpu-memory-utilization $MEM \
     --max-model-len $MAXLEN --dtype bfloat16 --enable-prefix-caching --max-logprobs 64 \
