@@ -15,5 +15,5 @@ cd $GRAFT_RL
 export GRAFT_ROLLOUT_LOG_DIR=auto
 stamp "Phase 1 step 3: GRAFT + decision monitor on object_qa (200 steps)"
 python -u sweep.py --name gm_phase1_object_qa_decision --config sweeps/gm_phase1_object_qa_decision.py \
-    --no_baseline --no-eval_at_start --output_dir $WS/runs --wandb_project graft-dm-pilot --no_mps
+    --no_baseline --no-eval_at_start --output_dir $WS/runs/phase1 --wandb_project graft-dm-pilot --no_mps
 stamp "phase1 decision done"
