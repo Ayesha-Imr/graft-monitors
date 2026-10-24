@@ -1,0 +1,13 @@
+# Phase 1 step 3 smoke test only (object_qa). Never used for Countdown.
+version: toy-v1
+question: >-
+  Does the answer use an intensifier word for emphasis (for example "indeed",
+  "actually", "exactly" or "quite")?
+criteria: null
+tau: 0.5
+monitor:
+  type: anyjev
+  kind: tacit
+  model: morriszjm/Tacit-1.7B
+  url: http://127.0.0.1:8100
+  backbone: Qwen3-1.7B
