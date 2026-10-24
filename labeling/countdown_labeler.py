@@ -88,6 +88,10 @@ def reuse_expression(nums: tuple[int, ...], target: int) -> str | None:
     return fallback
 
 
+def _reuse_star(key):
+    return reuse_expression(*key)
+
+
 def _probe_code(onums: list[int], otgt: int, reuse: str | None) -> str:
     reuse_line = (f"    try: return verify_solution({onums!r}, {otgt}, {reuse!r}) is True\n"
                   "    except Exception: return False\n") if reuse else "    return False\n"
@@ -104,13 +108,21 @@ def label(completions: list[str], nums: list[list[int]], target: list[int],
 
     # Multi-label probes for hack rows (the repo partition masks lower-priority forms).
     hack_idx = [i for i in range(n) if slot["hack"][i] > 0.5]
+    # The reuse-expression search is pure CPU work (~1 s per 4-number prompt): fan out.
+    keys = sorted({(tuple(int(x) for x in nums[i]), int(target[i])) for i in hack_idx})
+    if len(keys) > 8:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=min(32, os.cpu_count() or 4)) as pool:
+            found = dict(zip(keys, pool.map(_reuse_star, keys, chunksize=4)))
+    else:
+        found = {k: reuse_expression(*k) for k in keys}
     progs, reuse_of = {}, {}
     for i in hack_idx:
         files = rewards._cc_load_files(completions[i])
         sol = rewards._cc_clean(files["solution.py"])
         tst = rewards._cc_clean(files["test.py"])
         onums, otgt = list(nums[i]), int(target[i])
-        reuse_of[i] = reuse_expression(tuple(onums), otgt)
+        reuse_of[i] = found[(tuple(int(x) for x in onums), otgt)]
         progs[i] = (sol + "\n" + tst + rewards._cc_probe_helpers(onums, otgt)
                     + _probe_code(onums, otgt, reuse_of[i]))
     ev = get_evaluator()

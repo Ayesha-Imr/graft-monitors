@@ -15,7 +15,7 @@ deactivate
 stamp "anyjev venv -> /opt/venvs/anyjev (vLLM 0.29.0 for Gemma-4 support)"
 uv venv --python /usr/bin/python3.11 /opt/venvs/anyjev --allow-existing
 # vLLM 0.29.0 wheels target CUDA 13: pull the matching torch (driver must support CUDA >= 13.0).
-uv pip install --python /opt/venvs/anyjev/bin/python --torch-backend=cu130 "anyjev[hf,client]==0.3.0" "vllm==0.29.0"
+uv pip install --python /opt/venvs/anyjev/bin/python --index-strategy unsafe-best-match --extra-index-url https://download.pytorch.org/whl/cu130 "anyjev[hf,client]==0.3.0" "vllm==0.29.0"
 stamp "import timing (local disk)"
 cd /tmp && /opt/venvs/graft/bin/python -c 'import time; t=time.time(); import torch, vllm, transformers, trl; print("graft import", round(time.time()-t,1), "s", vllm.__version__)'
 /opt/venvs/anyjev/bin/python -c 'import time; t=time.time(); import anyjev, vllm; print("anyjev import", round(time.time()-t,1), "s", anyjev.__version__, vllm.__version__)'
