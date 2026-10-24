@@ -10,3 +10,9 @@
 /.agents/skills
 /.agent/skills
 # END repo bootstrapper managed entries
+
+# Local tooling
+.venv/
+*.egg-info/
+.pytest_cache/
+__pycache__/
