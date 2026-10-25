@@ -6,7 +6,7 @@ set -euo pipefail
 case $GM_ARM in P3|P4|P5) DECISION=1 ;; *) DECISION=0 ;; esac
 [ $DECISION = 1 ] && [ "${AJ_MODEL:-}" != "" ] && export NEED_ANYJEV=1
 source /workspace/code/infra/runpod/jobs/bootstrap.sh
-OUTR=$WS/runs/phase3; mkdir -p $OUTR $WS/telemetry
+OUTR=$WS/runs/phase3_$GM_ARM; mkdir -p $WS/telemetry $WS/evals   # sweep.py suffixes an existing output_dir
 nvidia-smi --query-gpu=timestamp,memory.used,utilization.gpu --format=csv -l 15 > $WS/telemetry/${GM_ARM}_gpu.csv &
 SMI_PID=$!
 if [ $DECISION = 1 ]; then
@@ -22,7 +22,7 @@ stamp "Phase 3 $GM_ARM start"
 python -u sweep.py --name gm_phase3_$GM_ARM --config sweeps/gm_phase3.py --no_baseline --no_mps \
     --output_dir $OUTR --wandb_project graft-dm-pilot ${EXTRA_TRAIN_ARGS:-}
 stamp "Phase 3 $GM_ARM training done"
-RUN=$(ls -d $OUTR/gm_${GM_ARM}_*)
+RUN=$(ls -d $OUTR*/gm_${GM_ARM}_* | tail -1)
 [ $DECISION = 1 ] && [ "${AJ_MODEL:-}" != "" ] && kill ${SERVER_PID:-} ${VLLM_PID:-} 2>/dev/null || true
 cd /tmp
 python -u $CODE/scripts/posthoc_eval.py --base $SFT_MODEL --run_dir $RUN --steps 0,50,100,150,200 \
