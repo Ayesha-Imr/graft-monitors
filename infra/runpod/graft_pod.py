@@ -17,7 +17,7 @@ import sys
 import time
 from pathlib import Path
 
-from runpod_cli import ApiError, list_pods, public_pod, request
+from runpod_cli import USER_AGENT, ApiError, api_key, config_quote, list_pods, public_pod, request
 
 HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parents[1]
@@ -62,6 +62,21 @@ def dotenv_value(name: str) -> str | None:
             parts = shlex.split(v, comments=True)
             return parts[0] if parts else None
     return None
+
+
+def create_pod(body: dict) -> dict:
+    """POST /pods, surfacing the provider's error body (validation/capacity messages carry no secrets)."""
+    cfg = ("header = " + config_quote("Authorization: Bearer " + api_key()) + "\n"
+           "header = \"Content-Type: application/json\"\n"
+           "data-binary = " + config_quote(json.dumps(body)) + "\n")
+    r = subprocess.run(["curl", "--disable", "-4", "-s", "--max-time", "60", "--config", "-", "-X", "POST",
+                        "-H", f"User-Agent: {USER_AGENT}", "-w", "\n%{http_code}", "https://api.runpod.io/v2/pods"],
+                       input=cfg, capture_output=True, text=True,
+                       env={k: v for k, v in os.environ.items() if k != "RUNPOD_API_KEY"})
+    payload, _, code = r.stdout.rpartition("\n")
+    if not code.isdigit() or int(code) >= 400:
+        raise ApiError(f"create failed HTTP {code}: {payload[:400]}", int(code) if code.isdigit() else None)
+    return json.loads(payload)
 
 
 def gone(path: str) -> bool:
@@ -126,7 +141,7 @@ def cmd_up(a) -> None:
     env = {k: v for k in FORWARDED_ENV if (v := dotenv_value(k))}
     body = {"name": a.name, "cloud": "SECURE", "image": a.image,
             "gpu": {"id": a.gpu, "count": a.count, "minCudaVersion": "12.8"},
-            "dataCenterIds": [a.dc], "disk": a.disk, "ports": ["22/tcp"],
+            "dataCenterIds": a.dc.split(","), "disk": a.disk, "ports": ["22/tcp"],
             "startSsh": True, "startJupyter": False, "env": env}
     if a.volume:
         body["mounts"] = {"network": [{"volumeId": a.volume, "path": "/workspace"}]}
@@ -136,7 +151,7 @@ def cmd_up(a) -> None:
     save(state)
     try:
         # Never retry a create blindly: recover by unique name on failure.
-        pod = request("/pods", method="POST", body=body)
+        pod = create_pod(body)
     except ApiError as exc:
         matches = [p for p in list_pods() if p.get("name") == a.name]
         if not matches:
@@ -148,6 +163,8 @@ def cmd_up(a) -> None:
     state["pod_id"] = pod["id"]
     state["cost_per_hr"] = pod.get("cost")
     state["created_at"] = time.time()
+    save(state)
+    state["dc"] = pod.get("dataCenterId", state["dc"])
     save(state)
     emit("created", **public_pod(pod))
     rate = state["cost_per_hr"]
@@ -293,7 +310,7 @@ def main() -> None:
     u.add_argument("name")
     u.add_argument("--gpu", required=True)
     u.add_argument("--count", type=int, default=1)
-    u.add_argument("--dc", required=True)
+    u.add_argument("--dc", required=True, help="one data center, or a comma list (first with capacity)")
     u.add_argument("--volume")
     u.add_argument("--hours", type=float, required=True, help="deadline after which the watchdog deletes the Pod")
     u.add_argument("--max-rate", type=float, required=True, help="terminate if the accepted $/h exceeds this")
