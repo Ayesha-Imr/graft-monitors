@@ -3,6 +3,8 @@ set -euo pipefail
 source /workspace/code/infra/runpod/jobs/common.sh
 source $GRAFT_VENV/bin/activate
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
+stamp "H200 recheck: GRAFT packed-equivalence test (failed on A100 by bf16 tolerance)"
+(cd $GRAFT_RL && timeout 600 python -m pytest tests/test_packed_equivalence.py -q -p no:cacheprovider 2>&1 | tail -3) || true
 OUT=$WS/ckpt/sft/qwen3-8b
 mkdir -p $OUT
 stamp "SFT start"
