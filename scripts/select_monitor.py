@@ -84,7 +84,7 @@ def main():
         best = max(eligible.values(), key=lambda m: m["test"]["auroc"])["test"]["auroc"]
         tied = [n for n, m in eligible.items() if best - m["test"]["auroc"] <= a.tie_eps]
         non_qwen = [n for n in tied if not eligible[n].get("qwen", True)]
-        pick = (non_qwen or sorted(tied, key=lambda n: -eligible[n]["test"]["auroc"]))[0]
+        pick = sorted(non_qwen or tied, key=lambda n: -eligible[n]["test"]["auroc"])[0]
     rep["pick"] = pick
     rep["gate_phase2"] = bool(pick and rep["monitors"][pick]["test"]["auroc"] >= 0.80)
     if pick:
