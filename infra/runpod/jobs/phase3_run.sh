@@ -1,6 +1,6 @@
 # Phase 3: one pilot run per H200 Pod. Env: GM_ARM in P1..P4 (P5 later). For decision arms the
 # frozen monitor config must exist (configs/monitor/frozen_v1.yaml) and, if local, AnyJev is served
-# here with AJ_MODEL / AJ_KIND / AJ_MEM.
+# here with AJ_MODEL / AJ_KIND / AJ_MEM, on GPU AJ_GPU if set (training then stays on GPU 0).
 set -euo pipefail
 : "${GM_ARM:?}"
 case $GM_ARM in P3|P4|P5) DECISION=1 ;; *) DECISION=0 ;; esac
@@ -15,6 +15,7 @@ if [ $DECISION = 1 ]; then
     MODEL=$AJ_MODEL KIND=$AJ_KIND MEM=${AJ_MEM:-0.18} MAXLEN=8192 source $CODE/infra/runpod/jobs/anyjev_serve.sh
   fi
 fi
+[ "${AJ_GPU:-}" != "" ] && export CUDA_VISIBLE_DEVICES=0
 source $GRAFT_VENV/bin/activate
 cd $GRAFT_RL
 export GRAFT_ROLLOUT_LOG_DIR=auto GRAFT_ARM=$GM_ARM

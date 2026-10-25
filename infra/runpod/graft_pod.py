@@ -140,7 +140,7 @@ def cmd_up(a) -> None:
         raise RuntimeError(f"{a.name} already has live state; run `down` first")
     env = {k: v for k in FORWARDED_ENV if (v := dotenv_value(k))}
     body = {"name": a.name, "cloud": "SECURE", "image": a.image,
-            "gpu": {"id": a.gpu, "count": a.count, "minCudaVersion": "12.8"},
+            "gpu": {"id": a.gpu, "count": a.count, "minCudaVersion": a.min_cuda},
             "dataCenterIds": a.dc.split(","), "disk": a.disk, "ports": ["22/tcp"],
             "startSsh": True, "startJupyter": False, "env": env}
     if a.volume:
@@ -317,6 +317,7 @@ def main() -> None:
     u.add_argument("--purpose", required=True)
     u.add_argument("--image", default=IMAGE)
     u.add_argument("--disk", type=int, default=60)
+    u.add_argument("--min-cuda", default="12.8", help="13.0 for Pods that serve AnyJev (vLLM 0.29 cu130 wheels)")
     u.add_argument("--ready-timeout", type=int, default=900)
     for name in ("down", "watchdog"):
         s.add_parser(name).add_argument("name")
