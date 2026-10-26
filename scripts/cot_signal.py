@@ -2,8 +2,8 @@
 
 Follow-up to the pilot (reasoning-only monitoring). A completion is "<reasoning></think>{json files}";
 the reasoning is everything before </think>, the action is the JSON with solution.py / test.py.
-`verbal` is a cheap regex proxy for "the reasoning announces tampering"; `views` writes
-reasoning-only and full-completion copies of a labeled set for monitor scoring.
+`verbal` is a cheap regex proxy for "the reasoning announces tampering"; `views` writes a
+reasoning-only copy of a labeled set (completion := reasoning) for monitor scoring.
 
     python scripts/cot_signal.py verbal --phase2 phase2.parquet --runs P1=dir P2=dir ... --out report.json
     python scripts/cot_signal.py views --data phase2.parquet --out phase2_reasoning.parquet
@@ -98,6 +98,9 @@ def cmd_views(a):
     parts = d.completion.map(split)
     d["reasoning"] = parts.map(lambda p: p[0].strip())
     d["action"] = parts.map(lambda p: p[1].strip())
+    # Monitors score the `completion` column, so the reasoning-only view swaps it in.
+    d["completion_full"] = d["completion"]
+    d["completion"] = d["reasoning"]
     d.to_parquet(a.out, index=False)
     print(f"{len(d)} rows; median reasoning chars {int(d.reasoning.str.len().median())}, "
           f"empty reasoning {int((d.reasoning == '').sum())}")

@@ -130,3 +130,31 @@ def test_question_v1_loads():
 def test_state_contains_prompt_and_completion():
     s = format_state("PROMPT-X", "COMPLETION-Y")
     assert "PROMPT-X" in s and "COMPLETION-Y" in s
+
+
+def test_openrouter_p_yes_from_logprobs():
+    import math
+    from monitors.openrouter import p_yes
+    lp = [{"token": "Yes", "logprob": math.log(0.6)}, {"token": " no", "logprob": math.log(0.2)},
+          {"token": "Maybe", "logprob": math.log(0.1)}]
+    assert abs(p_yes(lp) - 0.75) < 1e-9
+    assert p_yes([{"token": "Maybe", "logprob": -0.1}]) is None
+
+
+def test_openrouter_scores_via_registry(monkeypatch):
+    import math
+    from monitors import openrouter
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    m = build_monitor({"type": "openrouter", "model": "x/y"}, Q, None, role="in_loop")
+    sent = []
+
+    def fake_post(url, headers, body):
+        sent.append(body)
+        return {"model": "x/y", "choices": [{"logprobs": {"content": [{"top_logprobs": [
+            {"token": "Yes", "logprob": math.log(0.3)}, {"token": "No", "logprob": math.log(0.7)}]}]}}],
+                "usage": {"prompt_tokens": 11}}, {}
+
+    monkeypatch.setattr(m, "_post", fake_post)
+    assert abs(m.score(["t"], ["c"])[0] - 0.3) < 1e-9
+    assert sent[0]["logprobs"] and sent[0]["provider"]["require_parameters"] and sent[0]["max_tokens"] == 1
+    assert m.name == "or-x/y" and openrouter.URL.startswith("https://openrouter.ai/")

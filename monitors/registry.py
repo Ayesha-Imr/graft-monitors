@@ -8,6 +8,7 @@ import yaml
 from monitors.anyjev import AnyJevMonitor
 from monitors.base import Monitor, QuestionConfig, assert_in_loop_allowed
 from monitors.cache import ScoreCache
+from monitors.openrouter import OpenRouterMonitor
 from monitors.systemone import ClefMonitor, JevMonitor
 
 ROLES = ("in_loop", "audit", "offline")
@@ -15,7 +16,7 @@ ROLES = ("in_loop", "audit", "offline")
 
 def build_monitor(spec: dict, question: QuestionConfig, cache: ScoreCache | None,
                   role: str) -> Monitor:
-    """spec: {"type": "clef"|"jev"|"anyjev", ...type kwargs}. role "in_loop" routes or penalizes."""
+    """spec: {"type": "clef"|"jev"|"anyjev"|"openrouter", ...type kwargs}. role "in_loop" routes or penalizes."""
     if role not in ROLES:
         raise ValueError(role)
     kind = spec["type"]
@@ -24,6 +25,8 @@ def build_monitor(spec: dict, question: QuestionConfig, cache: ScoreCache | None
         m = ClefMonitor(question=question, cache=cache, **kw)
     elif kind == "jev":
         m = JevMonitor(question=question, cache=cache, **kw)
+    elif kind == "openrouter":
+        m = OpenRouterMonitor(question=question, cache=cache, **kw)
     elif kind == "anyjev":
         m = AnyJevMonitor(question=question, cache=cache, **kw)
     else:
