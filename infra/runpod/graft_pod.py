@@ -147,7 +147,8 @@ def cmd_up(a) -> None:
         body["mounts"] = {"network": [{"volumeId": a.volume, "path": "/workspace"}]}
     state = {"name": a.name, "gpu": a.gpu, "count": a.count, "dc": a.dc, "image": a.image,
              "volume": a.volume, "max_rate": a.max_rate, "purpose": a.purpose,
-             "requested_at": time.time(), "deadline": time.time() + a.hours * 3600}
+             "requested_at": time.time(), "deadline": time.time() + a.hours * 3600,
+             "idle_min": a.idle_min}
     save(state)
     try:
         # Never retry a create blindly: recover by unique name on failure.
@@ -220,18 +221,50 @@ def cmd_down(a) -> None:
          cost_est=state.get("cost_est"))
 
 
+def gpu_utilization(state: dict) -> int | None:
+    """Highest utilization (%) over the Pod's GPUs, or None when it cannot be read."""
+    try:
+        r = remote(state, "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits",
+                   timeout=30, check=False)
+        vals = [int(x) for x in r.stdout.split() if x.strip().isdigit()]
+        return max(vals) if r.returncode == 0 and vals else None
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+
+
 def cmd_watchdog(a) -> None:
+    """Delete the Pod at its deadline, or once every GPU has been below 5% for `idle_min` minutes.
+
+    The idle rule guards against paying for a finished or stalled job. It only counts samples it
+    could read, so an unreachable Pod is left to the deadline. It runs on the laptop: if the
+    laptop sleeps, only RunPod billing (`runpod_cli.py pods`) remains as a check.
+    """
+    idle_since = None
+    last_sample = 0.0
     while True:
         state = load(a.name)
         if state.get("deleted_at"):
             return
-        if time.time() >= state["deadline"]:
+        reason = "deadline_teardown" if time.time() >= state["deadline"] else None
+        idle_min = state.get("idle_min") or 0
+        if not reason and idle_min and state.get("ready_at") and time.time() - last_sample >= 60:
+            last_sample = time.time()
+            util = gpu_utilization(state)
+            if util is None:
+                pass
+            elif util >= 5:
+                idle_since = None
+            else:
+                idle_since = idle_since or time.time()
+                if time.time() - idle_since >= idle_min * 60:
+                    reason = "idle_teardown"
+        if reason:
             try:
                 cmd_down(a)
-                emit("deadline_teardown", name=a.name)
+                emit(reason, name=a.name)
                 return
             except (ApiError, RuntimeError, OSError) as exc:
-                emit("deadline_retry", error=str(exc))
+                emit("teardown_retry", error=str(exc))
         time.sleep(20)
 
 
@@ -315,6 +348,8 @@ def main() -> None:
     u.add_argument("--hours", type=float, required=True, help="deadline after which the watchdog deletes the Pod")
     u.add_argument("--max-rate", type=float, required=True, help="terminate if the accepted $/h exceeds this")
     u.add_argument("--purpose", required=True)
+    u.add_argument("--idle-min", type=float, default=20.0,
+                   help="delete the Pod after this many minutes with every GPU below 5%% (0 disables)")
     u.add_argument("--image", default=IMAGE)
     u.add_argument("--disk", type=int, default=60)
     u.add_argument("--min-cuda", default="12.8", help="13.0 for Pods that serve AnyJev (vLLM 0.29 cu130 wheels)")
