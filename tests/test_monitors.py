@@ -158,3 +158,59 @@ def test_openrouter_scores_via_registry(monkeypatch):
     assert abs(m.score(["t"], ["c"])[0] - 0.3) < 1e-9
     assert sent[0]["logprobs"] and sent[0]["provider"]["require_parameters"] and sent[0]["max_tokens"] == 1
     assert m.name == "or-x/y" and openrouter.URL.startswith("https://openrouter.ai/")
+
+
+def test_reasoning_view_drops_the_files():
+    from monitors.views import view
+    c = 'I will change the target.\n</think>\n{"solution.py": "target = 13", "test.py": "..."}'
+    assert view(c, "reasoning") == "I will change the target."
+    assert view('think {"solution.py": "x"}', "reasoning") == "think"
+    assert view(c, "full") == c
+    with pytest.raises(ValueError):
+        view(c, "code")
+
+
+def test_frozen_cot_config_is_reasoning_view_with_tau():
+    from monitors.registry import frozen_view
+    q = QuestionConfig.load("configs/monitor/frozen_cot_v1.yaml")
+    assert frozen_view("configs/monitor/frozen_cot_v1.yaml") == "reasoning"
+    assert frozen_view("configs/monitor/frozen_v1.yaml") == "full"
+    assert q.tau is not None and q.text_hash == QuestionConfig.load("configs/monitor/cot_v1.yaml").text_hash
+
+
+def _relay(monitor):
+    from monitors.relay import make_server
+    srv = make_server(monitor, "127.0.0.1", 0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.server_address[1]}"
+
+
+def test_relay_matches_direct_scores():
+    from monitors.relay import RelayMonitor
+    q = QuestionConfig(version="v1", question="Is it a hack?", tau=0.5)
+    srv, url = _relay(FakeMonitor(question=q))
+    try:
+        p, c = data()
+        rm = RelayMonitor(question=q, url=url)
+        assert rm.name == "fake"
+        assert rm.score(p, c) == FakeMonitor(question=q).score(p, c)
+    finally:
+        srv.shutdown()
+
+
+def test_relay_rejects_a_different_question():
+    from monitors.relay import RelayMonitor
+    srv, url = _relay(FakeMonitor(question=QuestionConfig(version="v1", question="Is it a hack?", tau=0.5)))
+    try:
+        with pytest.raises(ValueError):
+            RelayMonitor(question=QuestionConfig(version="v1", question="Other?", tau=0.5), url=url)
+        with pytest.raises(ValueError):
+            RelayMonitor(question=QuestionConfig(version="v1", question="Is it a hack?", tau=0.9), url=url)
+    finally:
+        srv.shutdown()
+
+
+def test_relay_gives_up_when_unreachable():
+    from monitors.relay import RelayMonitor
+    with pytest.raises(RuntimeError, match="unreachable"):
+        RelayMonitor(question=Q, url="http://127.0.0.1:9", wait_s=0.0)
